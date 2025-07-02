@@ -3,27 +3,41 @@ import { OAuth2Client } from 'google-auth-library';
 const client = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
 
 export default async function handler(req, res) {
-  const { credential } = req.body;
-
-  try {
-    const ticket = await client.verifyIdToken({
-      idToken: credential,
-      audience: process.env.GOOGLE_CLIENT_ID,
-    });
-    const payload = ticket.getPayload();
-
-    res.status(200).json({
-      email: payload.email,
-      name: payload.name,
-      picture: payload.picture,
-    });
-  } catch (error) {
-    res.status(401).json({ error: 'Invalid token' });
+  if (req.method !== 'POST') {
+    return res.status(405).json({ error: 'Method Not Allowed' });
   }
-}
 
-export const config = {
-  api: {
-    bodyParser: true,
-  },
-};
+  let body = '';
+
+  // Node.js에서 직접 body를 수동으로 파싱
+  req.on('data', chunk => {
+    body += chunk;
+  });
+
+  req.on('end', async () => {
+    try {
+      const parsed = JSON.parse(body);
+      const credential = parsed.credential;
+
+      if (!credential) {
+        return res.status(400).json({ error: 'Missing credential' });
+      }
+
+      const ticket = await client.verifyIdToken({
+        idToken: credential,
+        audience: process.env.GOOGLE_CLIENT_ID,
+      });
+
+      const payload = ticket.getPayload();
+
+      res.status(200).json({
+        email: payload.email,
+        name: payload.name,
+        picture: payload.picture,
+      });
+    } catch (err) {
+      console.error(err);
+      res.status(500).json({ error: 'Server error during login' });
+    }
+  });
+}
